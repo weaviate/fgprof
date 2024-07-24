@@ -30,7 +30,7 @@ const (
 // Start begins profiling the goroutines of the program and returns a function
 // that needs to be invoked by the caller to stop the profiling and write the
 // results to w using the given format.
-func Start(w io.Writer, format Format) func() error {
+func Start(w io.Writer, format Format, ignoreFunctions []string) func() error {
 	startTime := time.Now()
 
 	// Go's CPU profiler uses 100hz, but 99hz might be less likely to result in
@@ -52,7 +52,7 @@ func Start(w io.Writer, format Format) func() error {
 				sampleCount++
 
 				stacks := prof.GoroutineProfile()
-				profile.Add(stacks)
+				profile.Add(stacks, ignoreFunctions)
 			case <-stopCh:
 				return
 			}
@@ -150,7 +150,8 @@ func (p *wallclockProfile) Ignore(frames ...*runtime.Frame) {
 }
 
 // Add adds the given stack traces to the profile.
-func (p *wallclockProfile) Add(stackRecords []runtime.StackRecord) {
+func (p *wallclockProfile) Add(stackRecords []runtime.StackRecord, ignoredFunctions []string) {
+stackLoop:
 	for _, stackRecord := range stackRecords {
 		if _, ok := p.stacks[stackRecord.Stack0]; !ok {
 			ws := &wallclockStack{}
@@ -158,6 +159,11 @@ func (p *wallclockProfile) Add(stackRecords []runtime.StackRecord) {
 			frames := runtime.CallersFrames(stackRecord.Stack())
 			for {
 				frame, more := frames.Next()
+				for i := range ignoredFunctions {
+					if strings.Contains(frame.Function, ignoredFunctions[i]) {
+						continue stackLoop
+					}
+				}
 				ws.frames = append(ws.frames, &frame)
 				if !more {
 					break
