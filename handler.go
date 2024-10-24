@@ -11,7 +11,7 @@ import (
 // argument that defaults to "30" and produces a profile over this duration.
 // The optional "format" parameter controls if the output is written in
 // Google's "pprof" format (default) or Brendan Gregg's "folded" stack format.
-func Handler() http.Handler {
+func Handler(ignoreFunctions ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var seconds int
 		var err error
@@ -23,12 +23,20 @@ func Handler() http.Handler {
 			return
 		}
 
+		var ignoreFunctionsQuery []string
+		if i := r.URL.Query()["ignore"]; len(i) == 0 {
+			// do nothing, empty array is fine
+		} else {
+			ignoreFunctionsQuery = i
+
+		}
+
 		format := Format(r.URL.Query().Get("format"))
 		if format == "" {
 			format = FormatPprof
 		}
 
-		stop := Start(w, format)
+		stop := Start(w, format, append(ignoreFunctions, ignoreFunctionsQuery...))
 		defer stop()
 		time.Sleep(time.Duration(seconds) * time.Second)
 	})
