@@ -23,12 +23,20 @@ func Handler(ignoreFunctions ...string) http.Handler {
 			return
 		}
 
+		var ignoreFunctionsQuery []string
+		if i := r.URL.Query()["ignore"]; len(i) == 0 {
+			// do nothing, empty array is fine
+		} else {
+			ignoreFunctionsQuery = i
+
+		}
+
 		format := Format(r.URL.Query().Get("format"))
 		if format == "" {
 			format = FormatPprof
 		}
 
-		stop := Start(w, format, ignoreFunctions)
+		stop := Start(w, format, append(ignoreFunctions, ignoreFunctionsQuery...))
 		defer stop()
 		time.Sleep(time.Duration(seconds) * time.Second)
 	})
