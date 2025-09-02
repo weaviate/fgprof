@@ -70,7 +70,8 @@ func Start(w io.Writer, format Format, ignoreFunctions []string) func() error {
 		// direction and improves the correctness of times in profiles.
 		duration := endTime.Sub(startTime)
 		actualHz := float64(sampleCount) / (float64(duration) / 1e9)
-		return profile.Export(w, format, int(math.Round(actualHz)), startTime, endTime)
+		hzInt := max(int(math.Round(actualHz)), 1) // we saw cases of the rounded hz being 0
+		return profile.Export(w, format, hzInt, startTime, endTime)
 	}
 }
 
