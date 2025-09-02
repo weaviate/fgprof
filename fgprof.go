@@ -81,6 +81,11 @@ type profiler struct {
 	selfFrame *runtime.Frame
 }
 
+// nullTerminationWorkaround deals with a regression in go1.23, see:
+// - https://github.com/felixge/fgprof/issues/33
+// - https://go-review.googlesource.com/c/go/+/609815
+var nullTerminationWorkaround = runtime.Version() == "go1.23.0"
+
 // GoroutineProfile returns the stacks of all goroutines currently managed by
 // the scheduler. This includes both goroutines that are currently running
 // (On-CPU), as well as waiting (Off-CPU).
@@ -107,6 +112,11 @@ func (p *profiler) GoroutineProfile() []runtime.StackRecord {
 	// p.stacks dynamically as well, but let's not over-engineer this until we
 	// understand those cases better.
 	for {
+		if nullTerminationWorkaround {
+			for i := range p.stacks {
+				p.stacks[i].Stack0 = [32]uintptr{}
+			}
+		}
 		n, ok := runtime.GoroutineProfile(p.stacks)
 		if !ok {
 			p.stacks = make([]runtime.StackRecord, int(float64(n)*1.1))
@@ -201,6 +211,10 @@ nextStack:
 		}
 		stacks = append(stacks, ws)
 	}
+	// sort stacks by count to create stable output for testing purposes.
+	sort.Slice(stacks, func(i, j int) bool {
+		return stacks[i].count < stacks[j].count
+	})
 	return stacks
 }
 
@@ -222,6 +236,10 @@ func (p *wallclockProfile) exportFolded(w io.Writer) error {
 
 func (p *wallclockProfile) exportPprof(hz int, startTime, endTime time.Time) *profile.Profile {
 	prof := &profile.Profile{}
+	if hz == 0 {
+		return prof
+	}
+
 	m := &profile.Mapping{ID: 1, HasFunctions: true}
 	prof.Period = int64(1e9 / hz) // Number of nanoseconds between samples.
 	prof.TimeNanos = startTime.UnixNano()
